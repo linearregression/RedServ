@@ -474,9 +474,7 @@ def debughandler(params):
                     debuginfo = "<br>\n<l>"+RedServ.sysinfo()+"</l>"
                 else:
                     debugtable = []
-                    for data in os.uname():
-                        debugtable.append(data)
-                    debuginfo = "<br>\n<l>"+" ".join(debugtable)+"</l>"
+                    debuginfo = "<br>\n<l>"+" ".join(os.uname())+"</l>"
             else:
                 debuginfo = "<br>\n<l>"+RedServ.sysinfo()+"</l>"
             return(debuginfo)
@@ -596,8 +594,8 @@ class WebInterface:
         paramlines = "?"
         if not params=={}:
             for data in params:
-                #params[data] = params[data].replace("\n","\\n").replace("\r","\\r")
-                paramlines = paramlines+data+"="+params[data].replace("\n","\\n").replace("\r","\\r")+"&"
+                params[data] = params[data].replace("\n","\\n").replace("\r","\\r")
+                paramlines = paramlines+data+"="+params[data]+"&"
             paramlines = paramlines[:-1]
         if paramlines=="?":
             paramlines = ""
@@ -763,7 +761,7 @@ class WebInterface:
                     status,error = e
                     cherrypy.response.status = status
                     logging("", 1, [cherrypy,virt_host,list,paramlines])
-                    return(error)
+                    return(error+debughandler(params))
                 type_, value_, traceback_ = sys.exc_info()
                 ex = traceback.format_exception(type_, value_, traceback_)
                 trace = "<br>\n".join(ex)
@@ -771,7 +769,7 @@ class WebInterface:
                 datatoreturn["datareturned"] = "404<br>"+str(trace).replace(virtloc,"/")
                 (datatoreturn,sieve_cache) = sieve(datatoreturn,sieve_cache)
                 logging("", 1, [cherrypy,virt_host,list,paramlines])
-                return(datatoreturn["datareturned"])
+                return(datatoreturn["datareturned"]+debughandler(params))
             try:
                 (datatoreturn,sieve_cache) = sieve(datatoreturn,sieve_cache)
             except Exception,e:
@@ -785,10 +783,10 @@ class WebInterface:
                     status,error = e
                     cherrypy.response.status = status
                     logging("", 1, [cherrypy,virt_host,list,paramlines])
-                    return(error)
+                    return(error+debughandler(params))
                 cherrypy.response.status = 404
                 logging("", 1, [cherrypy,virt_host,list,paramlines])
-                return("404<br>\n"+RedServ.trace_back().replace("\n","<br>\n"))
+                return("404<br>\n"+RedServ.trace_back().replace("\n","<br>\n")+debughandler(params))
             cj = datatoreturn['cj']
             site_glo_data = datatoreturn['global_site_data']
             site_glo_data[virt_host] = datatoreturn['site_data']
@@ -802,7 +800,7 @@ class WebInterface:
                 cherrypy.response.headers['Content-Type']="charset=utf-8"
             else:
                 cherrypy.response.headers['Content-Type']=cherrypy.response.headers['Content-Type']+"; charset=utf-8"
-            return(str(datatoreturn["datareturned"]))
+            return(str(datatoreturn["datareturned"])+debughandler(params))
         else:
             logging("", 1, [cherrypy,virt_host,list,paramlines])
             return(str(sievedata["data"]))
