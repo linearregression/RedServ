@@ -341,8 +341,8 @@ def filepicker(filename,fileext):
             file = filename+data
         if os.path.exists(file):
             try:
-                open(file).read()
-                return(file)
+                if os.path.isfile(file):
+                    return(file)
             except Exception,e:
                 pass
     return(filename)
@@ -402,8 +402,7 @@ def sieve_exec(sievedata,sievecache,sievepath,sievename):
         else:
             sievecache.append(compile(open(sievepath,'r').read(),'<string>','exec'))
             sievecache.append(sievetime)
-        for data in globals():
-            sievedata[data] = globals()[data]
+        sievedata.update(globals())
         exec(sievecache[0],sievedata)
     return(sievedata,sievecache)
     
@@ -597,8 +596,8 @@ class WebInterface:
         paramlines = "?"
         if not params=={}:
             for data in params:
-                params[data] = params[data].replace("\n","\\n").replace("\r","\\r")
-                paramlines = paramlines+data+"="+params[data]+"&"
+                #params[data] = params[data].replace("\n","\\n").replace("\r","\\r")
+                paramlines = paramlines+data+"="+params[data].replace("\n","\\n").replace("\r","\\r")+"&"
             paramlines = paramlines[:-1]
         if paramlines=="?":
             paramlines = ""
@@ -745,8 +744,7 @@ class WebInterface:
                 if (filename.endswith(".php")) and (conf["php"]==True):
                     return(PHP(filename))
                 if filename.endswith(".py"):
-                    for data in globals():
-                        datatoreturn[data] = globals()[data]
+                    datatoreturn.update(globals())
                     execfile(filename,datatoreturn)
                 else:
                     datatoreturn["datareturned"] = open(filename, 'r').read()
@@ -798,8 +796,7 @@ class WebInterface:
             cherrypy.response.status = responsecode
             headers = datatoreturn['headers']
             if not (headers==""):
-                for data in headers:
-                    cherrypy.response.headers[data] = headers[data]
+                cherrypy.response.headers.update(datatoreturn['headers'])
             logging("", 1, [cherrypy,virt_host,list,paramlines])
             if cherrypy.response.headers['Content-Type']=="":
                 cherrypy.response.headers['Content-Type']="charset=utf-8"
@@ -865,7 +862,7 @@ def web_init():
         RedServ.server1 = cherrypy._cpserver.Server()
         RedServ.server1.socket_port=SSLPORT
         RedServ.server1._socket_host='0.0.0.0'
-        RedServ.server1.thread_pool=30
+        RedServ.server1.thread_pool=100
         RedServ.server1.thread_pool_max=-1
         RedServ.server1.shutdown_timeout=1
         RedServ.server1.statistics=True
@@ -878,7 +875,7 @@ def web_init():
         RedServ.server2 = cherrypy._cpserver.Server()
         RedServ.server2.socket_port=STDPORT
         RedServ.server2._socket_host="0.0.0.0"
-        RedServ.server2.thread_pool=30
+        RedServ.server2.thread_pool=50
         RedServ.server2.thread_pool_max=-1
         RedServ.server2.shutdown_timeout=5
         RedServ.server2.statistics=True
