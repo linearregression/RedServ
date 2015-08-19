@@ -74,6 +74,8 @@ class RedServer(object):
         self.basicauthstart = []
         self.basicauthend = []
         
+        #self.server1 = cherrypy._cpserver.Server()
+        #self.server2 = cherrypy._cpserver.Server()
         self.http_port = 8080
         self.https_port = 8081
         
@@ -545,8 +547,18 @@ def conf_reload(conf):
     if not old_time==config_cache[1]:
         new_conf["HTTP"]["enabled"] = old_conf["HTTP"]["enabled"]
         new_conf["HTTPS"]["enabled"] = old_conf["HTTPS"]["enabled"]
-        new_conf["HTTP"]["port"] = STDPORT
-        new_conf["HTTPS"]["port"] = SSLPORT
+        if not new_conf["HTTP"]["port"]==old_conf["HTTP"]["port"]:
+            print("Please restart RedServ to change port on HTTP to "+str(new_conf["HTTP"]["port"]))
+            #RedServ.server1.unsubscribe()
+            #RedServ.server1.stop()
+            #RedServ.server1.socket_port=new_conf["HTTP"]["port"]
+            #RedServ.server1.start()
+            #RedServ.server1.subscribe()
+            #print(dir(RedServ.server1))
+        if not new_conf["HTTPS"]["port"]==old_conf["HTTPS"]["port"]:
+            print("Please restart RedServ to change port on HTTPS to "+str(new_conf["HTTPS"]["port"]))
+        #new_conf["HTTP"]["port"] = STDPORT
+        #new_conf["HTTPS"]["port"] = SSLPORT
         if not new_conf["vhosts-enabled"]==old_conf["vhosts-enabled"]:
             if new_conf["vhosts-enabled"]==True:
                 vhoston = "Enabled"
@@ -588,9 +600,7 @@ class WebInterface:
         RedServ.https_port = SSLPORT
         
         bad = False
-        list = []
-        for data in args:
-            list.append(data)
+        list = args
         paramlines = "?"
         if not params=={}:
             for data in params:
@@ -860,7 +870,7 @@ def web_init():
         RedServ.server1 = cherrypy._cpserver.Server()
         RedServ.server1.socket_port=SSLPORT
         RedServ.server1._socket_host='0.0.0.0'
-        RedServ.server1.thread_pool=100
+        RedServ.server1.thread_pool=50
         RedServ.server1.thread_pool_max=-1
         RedServ.server1.shutdown_timeout=1
         RedServ.server1.statistics=True
@@ -873,9 +883,9 @@ def web_init():
         RedServ.server2 = cherrypy._cpserver.Server()
         RedServ.server2.socket_port=STDPORT
         RedServ.server2._socket_host="0.0.0.0"
-        RedServ.server2.thread_pool=50
+        RedServ.server2.thread_pool=100
         RedServ.server2.thread_pool_max=-1
-        RedServ.server2.shutdown_timeout=5
+        RedServ.server2.shutdown_timeout=1
         RedServ.server2.statistics=True
         RedServ.server2.subscribe()
     
