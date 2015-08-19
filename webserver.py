@@ -408,6 +408,20 @@ def sieve_exec(sievedata,sievecache,sievepath,sievename):
         exec(sievecache[0],sievedata)
     return(sievedata,sievecache)
     
+def exec_page_script(filename,datatoreturn,python_page_cache):
+    if not filename in python_page_cache:
+        python_page_cache[filename] = []
+    page_time = os.path.getmtime(filename)
+    if not python_page_cache[filename]==[]:
+        if python_page_cache[filename][1] < page_time:
+            python_page_cache[filename][0] = compile(open(filename,'r').read(),'<string>','exec')
+            python_page_cache[filename][1] = page_time
+    else:
+        python_page_cache[filename].append(compile(open(filename,'r').read(),'<string>','exec'))
+        python_page_cache[filename].append(page_time)
+    exec(python_page_cache[filename][0],datatoreturn)
+    return(datatoreturn)
+    
 def vhosts(virt_host):
     lookuptypes = [
     "domains",
@@ -591,6 +605,7 @@ class WebInterface:
         global cherrypy
         global site_glo_data
         global conf
+        global python_page_cache
         global sieve_cache
         global STDPORT
         global SSLPORT
@@ -753,7 +768,7 @@ class WebInterface:
                     return(PHP(filename))
                 if filename.endswith(".py"):
                     datatoreturn.update(globals())
-                    execfile(filename,datatoreturn)
+                    datatoreturn = exec_page_script(filename,datatoreturn,python_page_cache)
                 else:
                     datatoreturn["datareturned"] = open(filename, 'r').read()
                     cherrypy.response.status = 200
@@ -895,6 +910,9 @@ def web_init():
     if conf["HTTPS"]["enabled"]==True:
         port_statuses = port_statuses+"\nHTTPS on port: "+str(RedServ.server1.socket_port)
     RedServ.debugger(3,port_statuses)
+    
+    global python_page_cache
+    python_page_cache = {}
     
     sievepath = os.path.join(os.path.abspath('pages'),"sieve.py")
     global sieve_cache
