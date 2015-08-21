@@ -702,7 +702,7 @@ class WebInterface:
             responsecode = 200
             if not os.path.exists(virtloc) and conf["vhosts-enabled"]==True:
                 return("")
-            filename = (virtloc+os.sep.join(list)).replace("..","").replace("//","/")
+            filename = (virtloc+os.sep.join(list)).strip("..","").replace("//","/")
             if len(list)>=2 and str(list[0]).lower()=="static":
                 #cherrypy.response.headers['Cache-Control'] = 'private, max-age=120'
                 if str(list[0])=="static":
@@ -755,7 +755,7 @@ class WebInterface:
             "request":cherrypy.request,
             "filelocation":virtloc+os.sep.join(list),
             "vhost_location":virtloc,
-            "filename":filename.replace(virtloc+os.sep.join(list),""),
+            "filename":filename.strip(virtloc+os.sep.join(list)),
             "this_page":virt_host+"/"+"/".join(list),
             "this_domain":virt_host,
             "global_site_data":site_glo_data,
