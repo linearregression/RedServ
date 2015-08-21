@@ -702,7 +702,7 @@ class WebInterface:
             responsecode = 200
             if not os.path.exists(virtloc) and conf["vhosts-enabled"]==True:
                 return("")
-            filename = (virtloc+os.sep.join(list)).strip("..","").replace("//","/")
+            filename = (virtloc+os.sep.join(list)).strip("..").replace("//","/")
             if len(list)>=2 and str(list[0]).lower()=="static":
                 #cherrypy.response.headers['Cache-Control'] = 'private, max-age=120'
                 if str(list[0])=="static":
