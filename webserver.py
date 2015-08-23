@@ -351,7 +351,7 @@ def filepicker(filename,fileext):
     
 def create_ssl_cert(cert_dir="."):
     CERT_FILE = "cert.pem"
-    KEY_FILE = "privkey.pem"
+    KEY_FILE = "privkey.key"
     C_F = os.path.join(cert_dir, CERT_FILE)
     K_F = os.path.join(cert_dir, KEY_FILE)
     return(C_F,K_F)
@@ -834,16 +834,8 @@ class WebInterface:
     default.exposed = True
         
 
-def web_init():
+def web_init(conf,conflocation):
     print("INFO: Initalising web server...")
-    conflocation = os.path.join(current_dir,"config")
-    config_init(conflocation)
-    global config_cache
-    config_cache = []
-    config_cache.append(json.load(open(conflocation)))
-    config_cache.append(os.path.getmtime(conflocation))
-    global conf
-    conf = config(conflocation)
     global RedServ
     RedServ = RedServer()
     if conf["HTTPS"]["enabled"]==False and conf["HTTP"]["enabled"]==False:
@@ -889,10 +881,11 @@ def web_init():
         RedServ.server1.thread_pool_max=-1
         RedServ.server1.shutdown_timeout=1
         RedServ.server1.statistics=True
-        RedServ.server1.ssl_module = 'builtin'
+        RedServ.server1.ssl_module = 'custom-pyopenssl'
         RedServ.server1.ssl_certificate = os.path.join(current_dir,'cert.pem')
-        RedServ.server1.ssl_private_key = os.path.join(current_dir,'privkey.pem')
-        RedServ.server1.ssl_certificate_chain = os.path.join(current_dir,'ca.pem')
+        RedServ.server1.ssl_private_key = os.path.join(current_dir,'privkey.key')
+        if os.path.exists(os.path.join(current_dir,'ca.pem')):
+            RedServ.server1.ssl_certificate_chain = os.path.join(current_dir,'ca.pem')
         RedServ.server1.subscribe()
     if conf["HTTP"]["enabled"]==True:
         RedServ.server2 = cherrypy._cpserver.Server()
@@ -921,8 +914,8 @@ def web_init():
     if os.path.exists(sievepath):
         sieve_cache["global"].append(compile(open(sievepath,'r').read(),'<string>','exec'))
         sieve_cache["global"].append(os.path.getmtime(sievepath))
-    
-    cherrypy.engine.signals.subscribe()
+    if not os.name=="nt":
+        cherrypy.engine.signals.subscribe()
     cherrypy.engine.start()
     cherrypy.engine.block()
 
@@ -955,5 +948,110 @@ def get_db_connection(name,folders=None):
     if not filename.endswith(".db"):
         filename = filename+".db"
     return sqlite3.connect(filename, timeout=10)
+    
+# Config init and caching, We need this for enabling the SSL changes inside of Cherrypy if SSL is enabled.
+conflocation = os.path.join(current_dir,"config")
+config_init(conflocation)
+config_cache = []
+config_cache.append(json.load(open(conflocation)))
+config_cache.append(os.path.getmtime(conflocation))
+conf = config(conflocation)
 
-web_init()
+# This section of code is to correct SSL issues with Cherrypy until they correct them.
+# This section will be removed later.
+# Author of original code: http://recollection.saaj.me/article/cherrypy-questions-testing-ssl-and-docker.html#experiment
+if conf["HTTPS"]["enabled"]==True:
+    import ssl
+    from cherrypy.wsgiserver.ssl_builtin import BuiltinSSLAdapter
+    from cherrypy.wsgiserver.ssl_pyopenssl import pyOpenSSLAdapter
+
+    from cherrypy import wsgiserver
+    if sys.version_info < (3, 0):
+      from cherrypy.wsgiserver.wsgiserver2 import ssl_adapters
+    else:
+      from cherrypy.wsgiserver.wsgiserver3 import ssl_adapters
+
+    try:
+      from OpenSSL import SSL
+    except ImportError:
+      pass
+
+
+    ciphers = (
+      'ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:'
+      'ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:'
+      'DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:!aNULL:'
+      '!eNULL:!EXPORT:!MD5:!DSS:!3DES:!DES:!RC4:!SSLv2:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:'
+      '!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA:@STRENGTH'
+    )
+
+    class BuiltinSsl(BuiltinSSLAdapter):
+      '''Vulnerable, on py2 < 2.7.9, py3 < 3.3:
+        * POODLE (SSLv3), adding ``!SSLv3`` to cipher list makes it very incompatible
+        * can't disable TLS compression (CRIME)
+        * supports Secure Client-Initiated Renegotiation (DOS)
+        * no Forward Secrecy
+      Also session caching doesn't work. Some tweaks are posslbe, but don't really
+      change much. For example, it's possible to use ssl.PROTOCOL_TLSv1 instead of
+      ssl.PROTOCOL_SSLv23 with little worse compatiblity.
+      '''
+
+      def wrap(self, sock):
+        """Wrap and return the given socket, plus WSGI environ entries."""
+        try:
+          s = ssl.wrap_socket(
+            sock,
+            ciphers = ciphers, # the override is for this line
+            do_handshake_on_connect = True,
+            server_side = True,
+            certfile = self.certificate,
+            keyfile = self.private_key,
+            ssl_version = ssl.PROTOCOL_SSLv23
+          )
+        except ssl.SSLError:
+          e = sys.exc_info()[1]
+          if e.errno == ssl.SSL_ERROR_EOF:
+            # This is almost certainly due to the cherrypy engine
+            # 'pinging' the socket to assert it's connectable;
+            # the 'ping' isn't SSL.
+            return None, {}
+          elif e.errno == ssl.SSL_ERROR_SSL:
+            if e.args[1].endswith('http request'):
+              # The client is speaking HTTP to an HTTPS server.
+              raise wsgiserver.NoSSLError
+            elif e.args[1].endswith('unknown protocol'):
+              # The client is speaking some non-HTTP protocol.
+              # Drop the conn.
+              return None, {}
+          raise
+
+        return s, self.get_environ(s)
+
+    ssl_adapters['custom-ssl'] = BuiltinSsl
+
+
+    class Pyopenssl(pyOpenSSLAdapter):
+      '''Mostly fine, except:
+        * Secure Client-Initiated Renegotiation
+        * no Forward Secrecy, SSL.OP_SINGLE_DH_USE could have helped but it didn't
+      '''
+
+      def get_context(self):
+        """Return an SSL.Context from self attributes."""
+        c = SSL.Context(SSL.SSLv23_METHOD)
+
+        # override:
+        c.set_options(SSL.OP_NO_COMPRESSION | SSL.OP_SINGLE_DH_USE | SSL.OP_NO_SSLv2 | SSL.OP_NO_SSLv3)
+        c.set_cipher_list(ciphers)
+
+        c.use_privatekey_file(self.private_key)
+        if self.certificate_chain:
+            c.load_verify_locations(self.certificate_chain)
+        c.use_certificate_file(self.certificate)
+        return c
+
+    ssl_adapters['custom-pyopenssl'] = Pyopenssl
+# End of SSL fixes
+
+
+web_init(conf,conflocation)
